@@ -28,6 +28,15 @@ function formatCny(n: number) {
   });
 }
 
+function statusLabel(status: string) {
+  if (status === 'pending') return '待接单';
+  if (status === 'processing') return '制作中';
+  if (status === 'delivered') return '待验收';
+  if (status === 'completed') return '已完成';
+  if (status === 'cancelled') return '已取消';
+  return status;
+}
+
 function ProfileContent() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -173,7 +182,7 @@ function ProfileContent() {
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-900">{title}</div>
-                        <div className="mt-1 text-xs text-slate-500">状态：{o.status}</div>
+                        <div className="mt-1 text-xs text-slate-500">状态：{statusLabel(o.status)}</div>
                       </div>
                       <div className="shrink-0 text-sm font-semibold text-slate-900">{amount}</div>
                     </div>
