@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes aiGlowShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.ai-glow-border {
+  position: relative;
+}
+
+.ai-glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  background: linear-gradient(90deg, #22d3ee, #a855f7, #22d3ee);
+  background-size: 200% 200%;
+  animation: aiGlowShift 3.2s ease-in-out infinite;
+  z-index: 0;
+}
+
+.ai-glow-border::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: calc(1rem - 1px);
+  background: white;
+  z-index: 0;
+}
+
+.ai-glow-border > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ai-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(15, 23, 42, 0.0) 0px,
+    rgba(15, 23, 42, 0.0) 6px,
+    rgba(15, 23, 42, 0.05) 7px
+  );
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+.group:hover .ai-scanlines {
+  opacity: 1;
+}
+
+@keyframes aiScanSweep {
+  0% {
+    transform: translateY(-20%);
+  }
+  100% {
+    transform: translateY(20%);
+  }
+}
+
+.ai-scan-sweep {
+  position: absolute;
+  inset: -20% 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(34, 211, 238, 0.12) 45%,
+    rgba(168, 85, 247, 0.10) 55%,
+    transparent 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.group:hover .ai-scan-sweep {
+  opacity: 1;
+  animation: aiScanSweep 900ms ease-in-out infinite alternate;
+}
