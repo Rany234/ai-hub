@@ -13,6 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+
 import { Suspense, use, useEffect, useMemo, useRef, useState } from 'react';
 
 import { createSupabaseBrowserClient } from '../../../lib/supabase/client';
@@ -424,13 +426,14 @@ function OrderStatusPanel({
 function InboxDetailContent({ id }: { id: string }) {
   const router = useRouter();
   const sp = useSearchParams();
+
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const opened = sp.get('open') === '1';
   const serviceParam = sp.get('service');
   const serviceTitle = serviceParam ? decodeURIComponent(serviceParam) : null;
   const roleParam = sp.get('role');
   const role: 'seller' | 'buyer' = roleParam === 'seller' ? 'seller' : 'buyer';
 
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [checked, setChecked] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -439,6 +442,54 @@ function InboxDetailContent({ id }: { id: string }) {
     const n = Number(id);
     return Number.isFinite(n) ? n : null;
   }, [id]);
+
+  useEffect(() => {
+    if (!orderId) return;
+
+    const channel = supabase
+      .channel(`realtime-order-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `order_id=eq.${orderId}`,
+        },
+        () => {
+          router.refresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_versions',
+          filter: `order_id=eq.${orderId}`,
+        },
+        () => {
+          router.refresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`,
+        },
+        () => {
+          router.refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, orderId, router, id]);
 
   useEffect(() => {
     let alive = true;
