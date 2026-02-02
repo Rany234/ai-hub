@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, use, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Send } from 'lucide-react';
@@ -114,13 +114,7 @@ function getThread(id: string, opened?: boolean): Thread {
   return base;
 }
 
-export default function InboxDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
-
+function InboxDetailContent({ id }: { id: string }) {
   const router = useRouter();
   const sp = useSearchParams();
   const opened = sp.get('open') === '1';
@@ -334,5 +328,29 @@ export default function InboxDetailPage({
         </footer>
       </div>
     </div>
+  );
+}
+
+export default function InboxDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50">
+          <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+              Loading...
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <InboxDetailContent id={id} />
+    </Suspense>
   );
 }

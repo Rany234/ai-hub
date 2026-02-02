@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -47,7 +47,7 @@ function SidebarLink({ active, children }: { active: boolean; children: React.Re
   );
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const toast = sp.get('toast');
@@ -55,7 +55,6 @@ export default function DashboardPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
 
   const [orders, setOrders] = useState<DbOrder[]>([]);
   const [services, setServices] = useState<DbService[]>([]);
@@ -101,7 +100,6 @@ export default function DashboardPage() {
         router.replace('/login?next=/dashboard');
         return;
       }
-      setUser(authUser);
 
       const [ordersRes, servicesRes] = await Promise.all([
         supabase
@@ -352,5 +350,21 @@ export default function DashboardPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 p-8">
+          <div className="mx-auto max-w-7xl rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+            Loading...
+          </div>
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }

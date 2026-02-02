@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -11,7 +11,7 @@ type DbOrder = {
   status: string;
   amount: number | null;
   created_at: string;
-  service_id: number | null;
+  service_id: string | null;
   service_snapshot: any;
 };
 
@@ -28,7 +28,7 @@ function formatCny(n: number) {
   });
 }
 
-export default function ProfilePage() {
+function ProfileContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const toast = sp.get('toast');
@@ -54,7 +54,6 @@ export default function ProfilePage() {
   useEffect(() => {
     if (toast === 'order_created') {
       showToast('订单创建成功！');
-      // clean url
       router.replace('/profile');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,9 +136,7 @@ export default function ProfilePage() {
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center gap-4">
               <div className="relative h-14 w-14 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                {avatarUrl ? (
-                  <Image src={avatarUrl} alt="avatar" fill className="object-cover" />
-                ) : null}
+                {avatarUrl ? <Image src={avatarUrl} alt="avatar" fill className="object-cover" /> : null}
               </div>
               <div>
                 <h1 className="text-xl font-semibold tracking-tight text-slate-900">我的</h1>
@@ -163,16 +160,11 @@ export default function ProfilePage() {
           ) : (
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
               {orders.length === 0 ? (
-                <div className="px-4 py-6 text-sm text-slate-600">
-                  暂无订单。
-                </div>
+                <div className="px-4 py-6 text-sm text-slate-600">暂无订单。</div>
               ) : (
                 orders.map((o) => {
-                  const title =
-                    o.service_snapshot?.title ??
-                    (o.service_id ? `服务 #${o.service_id}` : '服务');
-                  const amount =
-                    typeof o.amount === 'number' ? formatCny(o.amount) : '—';
+                  const title = o.service_snapshot?.title ?? (o.service_id ? `服务 #${o.service_id}` : '服务');
+                  const amount = typeof o.amount === 'number' ? formatCny(o.amount) : '—';
 
                   return (
                     <div
@@ -180,16 +172,10 @@ export default function ProfilePage() {
                       className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-4 last:border-b-0"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-slate-900">
-                          {title}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          状态：{o.status}
-                        </div>
+                        <div className="truncate text-sm font-semibold text-slate-900">{title}</div>
+                        <div className="mt-1 text-xs text-slate-500">状态：{o.status}</div>
                       </div>
-                      <div className="shrink-0 text-sm font-semibold text-slate-900">
-                        {amount}
-                      </div>
+                      <div className="shrink-0 text-sm font-semibold text-slate-900">{amount}</div>
                     </div>
                   );
                 })
@@ -197,17 +183,31 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <p className="mt-3 text-xs text-slate-500">
-            订单列表来自 Supabase `orders` 表（按 buyer_id 过滤）。
-          </p>
+          <p className="mt-3 text-xs text-slate-500">订单列表来自 Supabase `orders` 表（按 buyer_id 过滤）。</p>
         </div>
       </div>
 
-      {toastMsg && (
+      {toastMsg ? (
         <div className="fixed bottom-24 left-1/2 z-[110] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 shadow-sm">
           {toastMsg}
         </div>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 px-4 py-10">
+          <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="text-sm text-slate-600">Loading...</div>
+          </div>
+        </div>
+      }
+    >
+      <ProfileContent />
+    </Suspense>
   );
 }
