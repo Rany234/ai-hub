@@ -210,30 +210,30 @@ export default function Home() {
               加载服务中...
             </div>
           ) : (
-            <div className="grid auto-rows-[1fr] grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {services.map((s, idx) => {
-                const isBig = idx < 2;
-                return (
-                  <div
+          <div className="grid auto-rows-[1fr] grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {services.map((s, idx) => {
+              const isBig = idx < 2;
+              return (
+                <div
                     key={s.id}
-                    className={isBig ? 'lg:col-span-2 lg:row-span-2' : ''}
-                  >
-                    <ServiceCard
-                      id={s.id}
-                      coverImageUrl={s.coverImageUrl}
-                      title={s.title}
-                      creatorName={s.creatorName}
-                      creatorAvatarUrl={s.creatorAvatarUrl}
-                      rating={s.rating}
-                      priceLabel={s.priceLabel}
-                      toolTag={s.toolTag}
-                      size={isBig ? 'lg' : 'sm'}
+                  className={isBig ? 'lg:col-span-2 lg:row-span-2' : ''}
+                >
+                  <ServiceCard
+                    id={s.id}
+                    coverImageUrl={s.coverImageUrl}
+                    title={s.title}
+                    creatorName={s.creatorName}
+                    creatorAvatarUrl={s.creatorAvatarUrl}
+                    rating={s.rating}
+                    priceLabel={s.priceLabel}
+                    toolTag={s.toolTag}
+                    size={isBig ? 'lg' : 'sm'}
                       imagePriority={isBig}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+                  />
+                </div>
+              );
+            })}
+          </div>
           )}
         </section>
       </main>

@@ -316,7 +316,7 @@ export default function ServiceDetailPage({
                             </div>
                           </div>
                         )}
-                      </div>
+                    </div>
                     );
                   })}
                 </div>
