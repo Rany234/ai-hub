@@ -5,7 +5,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   ArrowLeft,
-  Check,
   Image as ImageIcon,
   MessageSquareWarning,
   PackageCheck,
@@ -305,7 +304,9 @@ function StatusBadge({ status }: { status: OrderVersionStatus }) {
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${cls[status]}`}>
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${cls[status]}`}
+    >
       {map[status]}
     </span>
   );
@@ -317,6 +318,7 @@ function OrderStatusPanel({
   currentVersion,
   remainingRevisions,
   maxRevisions,
+  isSubmitting,
   onOpenSeller,
   onOpenBuyerRevision,
   onApprove,
@@ -326,6 +328,7 @@ function OrderStatusPanel({
   currentVersion: OrderVersion;
   remainingRevisions: number;
   maxRevisions: number;
+  isSubmitting: boolean;
   onOpenSeller: () => void;
   onOpenBuyerRevision: () => void;
   onApprove: () => void;
@@ -348,29 +351,32 @@ function OrderStatusPanel({
             <button
               type="button"
               onClick={onOpenSeller}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              disabled={isSubmitting}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
               <Plus className="h-4 w-4" />
-              提交新交付物
+              {isSubmitting ? '处理中...' : '提交新交付物'}
             </button>
           ) : (
             <>
               <button
                 type="button"
                 onClick={onApprove}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                disabled={isSubmitting}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
               >
                 <PackageCheck className="h-4 w-4" />
-                确认验收
+                {isSubmitting ? '处理中...' : '确认验收'}
               </button>
               {remainingRevisions > 0 ? (
                 <button
                   type="button"
                   onClick={onOpenBuyerRevision}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                  disabled={isSubmitting}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   <MessageSquareWarning className="h-4 w-4" />
-                  申请修改
+                  {isSubmitting ? '处理中...' : '申请修改'}
                 </button>
               ) : (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
@@ -398,7 +404,10 @@ function OrderStatusPanel({
             .slice()
             .sort((a, b) => b.versionNumber - a.versionNumber)
             .map((v) => (
-              <div key={v.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <div
+                key={v.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2"
+              >
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-slate-900">V{v.versionNumber}</div>
                   <div className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{v.notes || '—'}</div>
@@ -423,6 +432,13 @@ function InboxDetailContent({ id }: { id: string }) {
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [checked, setChecked] = useState(false);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const orderId = useMemo(() => {
+    const n = Number(id);
+    return Number.isFinite(n) ? n : null;
+  }, [id]);
 
   useEffect(() => {
     let alive = true;
@@ -551,54 +567,111 @@ function InboxDetailContent({ id }: { id: string }) {
     }
   }
 
-  function approveCurrent() {
-    setVersions((prev) =>
-      prev.map((v) =>
-        v.id === currentVersion.id ? { ...v, status: 'approved' as const } : v
-      )
-    );
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: makeId(),
-        from: 'me',
-        text: '我已确认验收，感谢！',
-        time: formatTime(new Date()),
-      },
-    ]);
+  async function approveCurrent() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      // optimistic update
+      setVersions((prev) =>
+        prev.map((v) =>
+          v.id === currentVersion.id ? { ...v, status: 'approved' as const } : v
+        )
+      );
+
+      // Scheme A: persist order_versions + orders status
+      if (orderId) {
+        const { error: verErr } = await supabase
+          .from('order_versions')
+          .update({ status: 'approved' })
+          .eq('order_id', orderId)
+          .eq('version_number', currentVersion.versionNumber);
+
+        if (verErr) throw verErr;
+
+        const { error: ordErr } = await supabase
+          .from('orders')
+          .update({ status: 'completed' })
+          .eq('id', orderId);
+
+        if (ordErr) throw ordErr;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          from: 'me',
+          text: '我已确认验收，感谢！',
+          time: formatTime(new Date()),
+        },
+      ]);
+
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function openBuyerRevision() {
+    if (isSubmitting) return;
     setBuyerFeedback('');
     setBuyerModalOpen(true);
   }
 
-  function submitBuyerRevision() {
+  async function submitBuyerRevision() {
     const fb = buyerFeedback.trim();
     if (!fb) return;
 
-    setVersions((prev) =>
-      prev.map((v) =>
-        v.id === currentVersion.id
-          ? { ...v, status: 'rejected' as const, buyerFeedback: fb }
-          : v
-      )
-    );
-    setRemainingRevisions((n) => Math.max(0, n - 1));
-    setBuyerModalOpen(false);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: makeId(),
-        from: 'me',
-        text: `我这边有些修改建议：${fb}`,
-        time: formatTime(new Date()),
-      },
-    ]);
+    try {
+      // optimistic update
+      setVersions((prev) =>
+        prev.map((v) =>
+          v.id === currentVersion.id
+            ? { ...v, status: 'rejected' as const, buyerFeedback: fb }
+            : v
+        )
+      );
+      setRemainingRevisions((n) => Math.max(0, n - 1));
+      setBuyerModalOpen(false);
+
+      if (orderId) {
+        const { error: verErr } = await supabase
+          .from('order_versions')
+          .update({ status: 'rejected', buyer_feedback: fb })
+          .eq('order_id', orderId)
+          .eq('version_number', currentVersion.versionNumber);
+
+        if (verErr) throw verErr;
+
+        // keep order in delivered while modifications requested; dashboard can infer from latest version
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          from: 'me',
+          text: `我这边有些修改建议：${fb}`,
+          time: formatTime(new Date()),
+        },
+      ]);
+
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function openSellerDeliver() {
+    if (isSubmitting) return;
     setSellerFiles(null);
     setSellerPrompt('');
     setSellerNotes('');
@@ -606,7 +679,7 @@ function InboxDetailContent({ id }: { id: string }) {
     setSellerModalOpen(true);
   }
 
-  function submitSellerDeliver() {
+  async function submitSellerDeliver() {
     if (!sellerFiles || sellerFiles.length === 0) {
       setSellerError('请先选择至少一个文件。');
       return;
@@ -622,33 +695,65 @@ function InboxDetailContent({ id }: { id: string }) {
       return;
     }
 
-    const file = sellerFiles[0];
-    const url = URL.createObjectURL(file);
-    const nextVersion = Math.min(3, currentVersion.versionNumber + 1);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    setVersions((prev) => [
-      ...prev,
-      {
-        id: makeId(),
-        versionNumber: nextVersion,
-        contentUrl: url,
-        promptRaw: prompt,
-        notes,
-        status: 'pending_review',
-        createdAt: Date.now(),
-      },
-    ]);
-    setSellerModalOpen(false);
+    try {
+      const file = sellerFiles[0];
+      const url = URL.createObjectURL(file);
+      const nextVersion = Math.min(3, currentVersion.versionNumber + 1);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: makeId(),
-        from: 'them',
-        text: `我已提交新版本 V${nextVersion}，请你查看并验收。`,
-        time: formatTime(new Date()),
-      },
-    ]);
+      // optimistic update
+      setVersions((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          versionNumber: nextVersion,
+          contentUrl: url,
+          promptRaw: prompt,
+          notes,
+          status: 'pending_review',
+          createdAt: Date.now(),
+        },
+      ]);
+      setSellerModalOpen(false);
+
+      if (orderId) {
+        const { error: insErr } = await supabase.from('order_versions').insert({
+          order_id: orderId,
+          version_number: nextVersion,
+          content_url: url,
+          prompt_data: { raw: prompt },
+          creator_notes: notes,
+          status: 'pending_review',
+        });
+
+        if (insErr) throw insErr;
+
+        const { error: ordErr } = await supabase
+          .from('orders')
+          .update({ status: 'delivered' })
+          .eq('id', orderId);
+
+        if (ordErr) throw ordErr;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          from: 'them',
+          text: `我已提交新版本 V${nextVersion}，请你查看并验收。`,
+          time: formatTime(new Date()),
+        },
+      ]);
+
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (!checked) {
@@ -670,6 +775,7 @@ function InboxDetailContent({ id }: { id: string }) {
       currentVersion={currentVersion}
       remainingRevisions={remainingRevisions}
       maxRevisions={maxRevisions}
+      isSubmitting={isSubmitting}
       onOpenSeller={openSellerDeliver}
       onOpenBuyerRevision={openBuyerRevision}
       onApprove={approveCurrent}
@@ -680,30 +786,30 @@ function InboxDetailContent({ id }: { id: string }) {
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-6 px-4 py-6 md:px-6 lg:grid-cols-[1fr_360px]">
         <div className="flex min-h-[calc(100vh-3rem)] flex-col">
-        <header className="flex items-center gap-3">
-          <Link
-            href="/inbox"
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回
-          </Link>
+          <header className="flex items-center gap-3">
+            <Link
+              href="/inbox"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              返回
+            </Link>
 
-          <Image
-            src={thread.avatarUrl}
-            alt={thread.title}
-            width={36}
-            height={36}
-            className="h-9 w-9 rounded-full border border-slate-200 object-cover"
-          />
-          <div className="text-sm font-semibold text-slate-900">{thread.title}</div>
+            <Image
+              src={thread.avatarUrl}
+              alt={thread.title}
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-full border border-slate-200 object-cover"
+            />
+            <div className="text-sm font-semibold text-slate-900">{thread.title}</div>
 
             <div className="ml-auto hidden items-center gap-2 text-xs text-slate-500 lg:flex">
               <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-700">
                 {role === 'seller' ? '卖家视图' : '买家视图'}
               </span>
             </div>
-        </header>
+          </header>
 
           {serviceTitle ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
@@ -716,21 +822,28 @@ function InboxDetailContent({ id }: { id: string }) {
 
           <main ref={listRef} className="mt-4 flex-1 space-y-3 overflow-auto">
             {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}>
               <div
-                className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
-                  m.from === 'me'
-                      ? 'bg-gradient-to-r from-slate-900 to-cyan-900 text-white'
-                    : 'border border-slate-200 bg-white text-slate-800'
-                }`}
+                key={m.id}
+                className={`flex ${m.from === 'me' ? 'justify-end' : 'justify-start'}`}
               >
-                <div>{m.text}</div>
-                  <div className={`mt-1 text-[11px] ${m.from === 'me' ? 'text-white/70' : 'text-slate-500'}`}>
-                  {m.time}
+                <div
+                  className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                    m.from === 'me'
+                      ? 'bg-gradient-to-r from-slate-900 to-cyan-900 text-white'
+                      : 'border border-slate-200 bg-white text-slate-800'
+                  }`}
+                >
+                  <div>{m.text}</div>
+                  <div
+                    className={`mt-1 text-[11px] ${
+                      m.from === 'me' ? 'text-white/70' : 'text-slate-500'
+                    }`}
+                  >
+                    {m.time}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
             {typing ? (
               <div className="flex justify-start">
@@ -746,9 +859,9 @@ function InboxDetailContent({ id }: { id: string }) {
                 </div>
               </div>
             ) : null}
-        </main>
+          </main>
 
-        <footer className="mt-5 border-t border-slate-200 bg-slate-50 pt-4">
+          <footer className="mt-5 border-t border-slate-200 bg-slate-50 pt-4">
             <div className="flex items-end gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
               <textarea
                 value={draft}
@@ -772,9 +885,9 @@ function InboxDetailContent({ id }: { id: string }) {
                 <Send className="h-4 w-4" />
                 发送
               </button>
-          </div>
-        </footer>
-      </div>
+            </div>
+          </footer>
+        </div>
 
         <aside className="sticky top-6 hidden self-start lg:block">{statusPanel}</aside>
       </div>
@@ -798,7 +911,10 @@ function InboxDetailContent({ id }: { id: string }) {
       ) : null}
 
       {viewerOpen ? (
-        <ModalShell title={`版本 V${currentVersion.versionNumber} 预览`} onClose={() => setViewerOpen(false)}>
+        <ModalShell
+          title={`版本 V${currentVersion.versionNumber} 预览`}
+          onClose={() => setViewerOpen(false)}
+        >
           <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
             <Image
               src={currentVersion.contentUrl}
@@ -874,16 +990,18 @@ function InboxDetailContent({ id }: { id: string }) {
               <button
                 type="button"
                 onClick={() => setSellerModalOpen(false)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                disabled={isSubmitting}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
               >
                 取消
               </button>
               <button
                 type="button"
                 onClick={submitSellerDeliver}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                disabled={isSubmitting}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
               >
-                提交
+                {isSubmitting ? '处理中...' : '提交'}
               </button>
             </div>
           </div>
@@ -911,17 +1029,18 @@ function InboxDetailContent({ id }: { id: string }) {
               <button
                 type="button"
                 onClick={() => setBuyerModalOpen(false)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                disabled={isSubmitting}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
               >
                 取消
               </button>
               <button
                 type="button"
-                disabled={!buyerFeedback.trim()}
+                disabled={isSubmitting || !buyerFeedback.trim()}
                 onClick={submitBuyerRevision}
                 className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
               >
-                提交
+                {isSubmitting ? '处理中...' : '提交'}
               </button>
             </div>
           </div>
